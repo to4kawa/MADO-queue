@@ -65,6 +65,19 @@ The purpose is to separate observation from remediation and to avoid opening ups
      - Expected behavior.
      - Inconclusive.
 
+## Upstream follow-up scope
+
+The verification cycle ends when the evidence has been recorded and the upstream-reporting decision has been completed.
+
+Unless a new verification request is opened, this workflow does not track:
+
+- Whether the upstream issue is accepted or closed.
+- Whether an upstream maintainer creates a pull request.
+- Whether an upstream pull request is merged.
+- When a fix is released or deployed.
+
+Those events may be referenced later, but they are not required to close the fork verification issue or verification PR.
+
 ## Decision principle
 
 A verification task is successful even when the result is that no upstream issue should be created.
