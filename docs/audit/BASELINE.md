@@ -210,6 +210,18 @@ Municipal workflow confirmation required: no for inventory; yes before removing 
 4. Add lifecycle, concurrency, reset, display, printer-failure, and migration tests.
 5. Only after behavior is locked by tests, split database, printer, and route responsibilities out of `app.py`.
 
+## Upstream reference sources
+
+These links are recorded for observation only. This audit branch is not intended to drive a merge.
+
+- Official project Note account: https://note.com/memuro_dx_oss
+- Upstream Issues: https://github.com/Memuro-Town/MADO-queue/issues
+- Upstream Pull Requests: https://github.com/Memuro-Town/MADO-queue/pulls
+- Issue #1: https://github.com/Memuro-Town/MADO-queue/issues/1
+- Issue #2: https://github.com/Memuro-Town/MADO-queue/issues/2
+
+The upstream issue and pull request lists are expected to change over time. They should be checked when continuing the audit, but changes do not automatically imply that this branch should be updated, merged, or converted into a remediation branch.
+
 ## Audit constraint
 
 This branch records current behavior and findings only. Confirmed findings must not be fixed in this branch. Proposed fixes belong in separate branches after review.
