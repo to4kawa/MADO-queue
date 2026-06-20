@@ -4,129 +4,147 @@ Date: 2026-06-21 (JST)
 
 Target: https://github.com/Memuro-Town/MADO-queue/pull/3
 
-Purpose: verify whether upstream PR #3 actually resolves Issue #1 without merging the PR into this audit branch.
+Related upstream issue: https://github.com/Memuro-Town/MADO-queue/issues/1
+
+Verification artifacts:
+
+- https://github.com/to4kawa/MADO-queue/pull/2
+- https://github.com/to4kawa/MADO-queue/pull/3
+
+Purpose: verify which parts of upstream PR #3 resolve Issue #1, and test the proposed database-side protection against duplicate active processing rows. The upstream PR code is not merged into this audit branch.
 
 ## Audit constraints
 
 - This branch records evidence only.
-- The upstream PR code is not merged here.
-- No production behavior is changed.
-- The goal is verification, not preparing this branch for merge.
+- No production code is changed here.
+- The verification branches and PRs in the fork are observation artifacts, not merge targets.
+- No conclusion about municipal workflow is inferred from the technical tests alone.
 
-## PR metadata
+## Upstream PR #3 scope
 
-- State: open
-- Draft: yes
-- Mergeable according to GitHub: yes
-- Base: `main` at `fb7198230f2a10cf28c43fba45b79147dd7ec74e`
-- Head: `refactor/2-stable-keys` at `3fe467d0bc6f083590a9858686f6082d4f914aa6`
-- Changed files: 5
-- Additions: 546
-- Deletions: 263
-
-Changed files:
-
-- `app.py`
-- `init_db.py`
-- `safe_migrate_db.py`
-- `templates/syori.html`
-- `test_app.py`
-
-## Claimed behavior relevant to Issue #1
-
-PR #3 changes the ticket lifecycle to use stable identifiers:
+PR #3 changes the lifecycle to use stable identifiers:
 
 - `/start_processing` requires `event_log_id`.
-- `/end_processing` and `/cancel_processing` require `processing_id`.
-- `/delete_ticket` requires `event_log_id`.
+- `/end_processing` and `/cancel_processing` operate by `processing_id`.
+- `/delete_ticket` operates by `event_log_id`.
 - `/get_next_number` returns `event_log_id`.
-- The waiting-list query uses `event_log_id` only.
-- The schema adds foreign-key and status constraints.
+- The waiting-list query uses `event_log_id`.
+- The schema adds foreign-key and status constraints, but no uniqueness constraint for one active row per `event_log_id`.
 
-These changes remove the previous behavior where completion and cancellation used only `ticket_number` and the current date.
+The PR author explicitly stated in Issue #1 that database-side prevention of duplicate active rows is outside PR #3's current scope and remains a design question.
 
-## Static verification findings
+## Verified results
 
-### V-001: Completion and cancellation no longer target all rows with the same ticket number
+### V-001: Completion and cancellation target one processing row
 
-Status: supported by the diff
+Status: verified by static review and SQLite-level operation checks.
 
-The PR changes `/end_processing` and `/cancel_processing` to operate on `processing_logs.id` through `processing_id`.
+Using `processing_logs.id` through `processing_id` causes completion and cancellation to affect only the selected row. Rows sharing the same displayed ticket number are not selected merely because their number matches.
 
-Expected effect:
+Conclusion: this part of Issue #1 is addressed by PR #3.
 
-- A completion request updates one processing row.
-- A cancellation request deletes one processing row.
-- Old or duplicate rows with the same displayed ticket number are not selected merely because their number matches.
+### V-002: Sequential repeated starts are suppressed by the application guard
 
-This directly addresses the second half of Issue #1.
+Status: verified in the first SQLite reproduction.
 
-### V-002: Repeated sequential start requests are treated as idempotent
+The PR #3 sequence checks for an existing row with the same `event_log_id` and `status='processing'` before inserting.
 
-Status: supported by the diff
+Observed sequential result:
 
-Before inserting a new processing row, `/start_processing` checks whether a row already exists with the same `event_log_id` and `status = 'processing'`.
+- First request found no active row and inserted one.
+- Second request found the existing row and skipped insertion.
+- Final active-row count: 1.
 
-If found, it returns success with `already_processing: true` and does not insert another row.
+Conclusion: ordinary double-clicks and repeated requests after the first transaction commits are handled idempotently.
 
-Expected effect:
+### V-003: True concurrent starts can still create duplicate active rows
 
-- Double-clicks and repeated requests that arrive after the first transaction commits should not create duplicate active rows.
+Status: reproduced.
 
-### V-003: True concurrent start requests may still race
+The first verification recreated the relevant PR #3 sequence with two independent SQLite connections:
 
-Status: unresolved risk identified by static review
+1. Check for an active row by `event_log_id`.
+2. If absent, insert a `processing` row.
 
-The duplicate-start guard is implemented as:
+Observed results:
 
-1. `SELECT` for an existing active row.
-2. If no row exists, `INSERT` a new row.
+- Two-thread case: both connections observed no active row; both inserts succeeded.
+- Two-process case: both connections observed no active row; both inserts succeeded.
+- No `database is locked` error occurred.
+- Final state contained two `status='processing'` rows for the same `event_log_id`.
 
-The reviewed diff does not show a database-side unique constraint that guarantees only one active `processing` row per `event_log_id`.
+Conclusion: PR #3 partially resolves Issue #1, but does not provide a database invariant preventing concurrent duplicate active rows.
 
-Therefore two requests that overlap closely enough may both observe no existing row before either insert is visible, then both insert.
+## Partial UNIQUE INDEX comparison
 
-Operational meaning:
+A second verification tested the database-side candidate discussed in Issue #1:
 
-- PR #3 appears to fix ordinary repeated requests.
-- It may not fully resolve the exact near-simultaneous multi-terminal race described in Issue #1.
-- A runtime concurrency test is required before concluding that Issue #1 is fully resolved.
-
-### V-004: The PR changes the external API contract
-
-Status: confirmed
-
-- End and cancel requests change from `ticket_number` to `processing_id`.
-- The bundled staff template is updated in the same PR.
-- Any external client that calls these endpoints directly must be updated separately.
-
-## Runtime verification status
-
-Attempted command:
-
-```text
-git clone https://github.com/Memuro-Town/MADO-queue.git
+```sql
+CREATE UNIQUE INDEX uq_processing_active_event
+ON processing_logs(event_log_id)
+WHERE status = 'processing';
 ```
 
-Result:
+This comparison intentionally tests the database constraint itself. It is not a second reproduction of the full PR #3 application guard.
 
-```text
-Could not resolve host: github.com
-```
+### Without the partial UNIQUE INDEX
 
-The current execution environment could not clone GitHub directly. PR metadata and patches were obtained through the GitHub connector, but the test suite has not yet been independently executed in this pass.
+When multiple `processing` inserts were attempted for the same `event_log_id`, SQLite accepted them and duplicate active rows remained.
 
-## Required runtime tests
+### With the partial UNIQUE INDEX
 
-1. Run the PR author's full test suite and confirm all 30 tests pass.
-2. Issue one ticket and call `/start_processing` twice sequentially; verify one active row.
-3. Issue one ticket and call `/start_processing` concurrently from two connections; verify whether one or two active rows are created.
-4. Create representative duplicate rows, then complete one by `processing_id`; verify only the selected row changes.
-5. Cancel one by `processing_id`; verify only the selected row is removed.
-6. Run the legacy migration twice and verify idempotence and foreign-key integrity.
+Observed in both thread and process tests:
 
-## Interim conclusion
+- One insert succeeded.
+- The other failed with `UNIQUE constraint failed: processing_logs.event_log_id`.
+- No `database is locked` error occurred.
+- Final active-row count remained 1.
 
-PR #3 clearly fixes non-unique completion and cancellation targeting and improves sequential duplicate-start handling.
+Conclusion: the partial UNIQUE INDEX prevents concurrent duplicate active rows at the SQLite constraint layer.
 
-It is not yet proven to fully resolve Issue #1 because the near-simultaneous start race appears to rely on an application-level check rather than an enforced database invariant. The final judgment remains pending runtime concurrency verification.
+## State-transition compatibility
+
+The partial index only covers rows where `status='processing'`.
+
+Verified behavior:
+
+- After an active row was changed to `completed`, a new `processing` row for the same `event_log_id` could be inserted.
+- A `deleted` history row did not block a new `processing` row.
+- Historical `completed` and `deleted` rows remained present.
+
+Therefore the index preserves history and allows a later restart after completion or deletion.
+
+## Migration precondition
+
+If duplicate active rows already exist for the same `event_log_id`, creating the partial UNIQUE INDEX fails with a uniqueness violation.
+
+Therefore a migration adding this index must first detect and resolve existing duplicate active rows.
+
+## Remaining workflow decision
+
+The technical constraint permits a ticket to be started again after its previous active row has become `completed` or `deleted`.
+
+The municipality must decide which behavior matches actual counter operations. Examples:
+
+- A staff member accidentally marked the ticket complete and needs to resume it.
+- Missing documents are discovered after completion and work on the same visitor must resume.
+- A completed ticket must never be reused; a new number must always be issued.
+
+The answer changes the final remediation design:
+
+- If restart is allowed, the partial UNIQUE INDEX is compatible.
+- If restart is forbidden, a broader uniqueness rule or a separate explicit reopen/correction workflow is required.
+
+## Overall conclusion
+
+1. PR #3 improves identity handling and fixes non-unique completion and cancellation targeting.
+2. PR #3 suppresses sequential duplicate starts through an application-level guard.
+3. PR #3 does not fully resolve simultaneous starts; concurrent duplicate active rows were reproduced.
+4. The tested partial UNIQUE INDEX prevents those duplicate active rows at the database layer.
+5. Final adoption depends on the municipality's decision about whether a completed ticket may be started again.
+
+## AI assistance disclosure
+
+- Tool: OpenAI Codex
+- Scope: verification script generation, concurrency testing, and result organization
+- Human review: verification code and observed results were reviewed
