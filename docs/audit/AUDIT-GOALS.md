@@ -21,6 +21,25 @@ The work focuses on:
 - connecting technical issues with maintenance, governance, and handover concerns
 - reducing the burden on upstream maintainers when external contributions appear
 
+## Responsibility Readability
+
+In this audit, "responsibility readability" is used as a working term.
+
+It means the degree to which roles, decision rights, accountability, and handover responsibilities are understandable to maintainers, contributors, and institutional stakeholders.
+
+For a municipal OSS project, technical readability alone is not sufficient. It should also be possible to understand:
+
+- who is expected to review an issue or pull request
+- who has authority to accept, defer, or reject a proposal
+- which decisions require internal approval or escalation
+- what information is needed for responsible parties to make a decision
+- how operational knowledge can be handed over after personnel changes
+- how external contributions can be received without increasing unmanaged burden on maintainers
+
+This concept is related to established practices such as responsibility assignment matrices, decision-rights clarification, OSS governance documentation, maintainer burden reduction, and institutional memory.
+
+The goal is not to impose an external governance model on the upstream project. The goal is to make responsibility boundaries more readable so that the upstream maintainers and responsible parties can make decisions with less ambiguity.
+
 ## Personal Goal
 
 A secondary personal goal is to make my project-management capability externally observable.
