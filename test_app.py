@@ -21,8 +21,15 @@ runpy.run_path(os.path.join(BASE_DIR, 'init_db.py'))
 import app as app_module
 from app import app
 
+
+def fake_print_success(category, button_text, number, timestamp_str):
+    if category == 'D':
+        return {'print_success': True, 'print_skipped': True}
+    return {'print_success': True}
+
+
 # テスト中に実機プリンターへ印刷しないよう無効化する
-app_module.print_ticket = lambda *args, **kwargs: None
+app_module.print_ticket = fake_print_success
 
 
 def tearDownModule():
@@ -50,6 +57,48 @@ class FlaskTest(unittest.TestCase):
         response_data = json.loads(response.data)
         self.assertEqual(response_data['category'], 'A')
         self.assertIn('next_number', response_data)
+        self.assertTrue(response_data['print_success'])
+
+    def test_get_next_number_reports_print_failure_with_http_200(self):
+        def fail_print(category, button_text, number, timestamp_str):
+            return {
+                'print_success': False,
+                'print_error': 'printer offline',
+                'message': '印刷に失敗しました。係員を呼んでください。',
+            }
+
+        original_print_ticket = app_module.print_ticket
+        app_module.print_ticket = fail_print
+        try:
+            response = self.app.post(
+                '/get_next_number',
+                data=json.dumps({'category': 'A'}),
+                content_type='application/json',
+            )
+        finally:
+            app_module.print_ticket = original_print_ticket
+
+        self.assertEqual(response.status_code, 200)
+        response_data = json.loads(response.data)
+        self.assertEqual(response_data['category'], 'A')
+        self.assertIn('next_number', response_data)
+        self.assertFalse(response_data['print_success'])
+        self.assertEqual(response_data['print_error'], 'printer offline')
+        self.assertEqual(response_data['message'], '印刷に失敗しました。係員を呼んでください。')
+
+    def test_get_next_number_category_d_reports_print_skipped(self):
+        response = self.app.post(
+            '/get_next_number',
+            data=json.dumps({'category': 'D'}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response_data = json.loads(response.data)
+        self.assertEqual(response_data['category'], 'D')
+        self.assertIn('next_number', response_data)
+        self.assertTrue(response_data['print_success'])
+        self.assertTrue(response_data['print_skipped'])
 
     def test_get_next_number_increments(self):
         first = json.loads(self.app.post(

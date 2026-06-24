@@ -106,9 +106,12 @@ def _print_linux(data):
         dev.write(1, data)
 
 def print_ticket(category, button_text, number, timestamp_str):
-    """レシートプリンターにチケットを印刷する。カテゴリDは印刷しない。"""
+    """レシートプリンターにチケットを印刷し、印刷結果を返す。
+
+    カテゴリDは設計上印刷しないため、発券成功かつ印刷スキップとして扱う。
+    """
     if category == 'D':
-        return
+        return {'print_success': True, 'print_skipped': True}
     try:
         import sys
         encoding = 'cp932' if sys.platform == 'win32' else 'utf-8'
@@ -118,8 +121,14 @@ def print_ticket(category, button_text, number, timestamp_str):
         else:
             _print_linux(data)
         print(f'[print_ticket] 印刷完了: カテゴリ={category} 番号={number}')
+        return {'print_success': True}
     except Exception as e:
-        print(f'[print_ticket] error: {e}')
+        print(f'[print_ticket] error: カテゴリ={category} 番号={number} error={e}')
+        return {
+            'print_success': False,
+            'print_error': str(e),
+            'message': '印刷に失敗しました。係員を呼んでください。',
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -254,10 +263,15 @@ def get_next_number():
         print(f"get_next_number error: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
-    # DB書き込み成功後に印刷（失敗しても発券結果は返す）
-    print_ticket(category, button_text or '', new_number, timestamp or '')
+    # DB書き込み成功後に印刷（失敗してもHTTP 200で発券結果は返す）
+    print_result = print_ticket(category, button_text or '', new_number, timestamp or '')
+    if print_result is None:
+        # 旧テスト/拡張が print_ticket を None 返却で差し替えても成功扱いにする。
+        print_result = {'print_success': True}
 
-    return jsonify({'category': category, 'next_number': new_number})
+    response = {'category': category, 'next_number': new_number}
+    response.update(print_result)
+    return jsonify(response)
 
 
 @app.route('/start_processing', methods=['POST'])
