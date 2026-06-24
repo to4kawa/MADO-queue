@@ -2,6 +2,7 @@
 // ブラウザ側での印刷コードは不要です。
 
 let selectedStaffCount = null;
+const ISSUE_BUTTON_COOLDOWN_MS = 2000;
 
 function selectStaff(count) {
     selectedStaffCount = count;
@@ -18,6 +19,15 @@ function selectStaff(count) {
 }
 
 function issueTicket(element, buttonText) {
+    if (element.disabled) {
+        return;
+    }
+
+    element.disabled = true;
+    setTimeout(() => {
+        element.disabled = false;
+    }, ISSUE_BUTTON_COOLDOWN_MS);
+
     const category = element.getAttribute('data-category');
     const now = new Date();
 
