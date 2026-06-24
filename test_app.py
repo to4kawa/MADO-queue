@@ -72,6 +72,28 @@ class FlaskTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_get_next_number_returns_error_when_print_fails(self):
+        original_print_ticket = app_module.print_ticket
+
+        def fail_print(*args, **kwargs):
+            raise RuntimeError('printer offline')
+
+        app_module.print_ticket = fail_print
+        try:
+            response = self.app.post(
+                '/get_next_number',
+                data=json.dumps({'category': 'C'}),
+                content_type='application/json',
+            )
+        finally:
+            app_module.print_ticket = original_print_ticket
+
+        self.assertEqual(response.status_code, 500)
+        response_data = json.loads(response.data)
+        self.assertEqual(response_data['error'], 'Print failed')
+        self.assertEqual(response_data['category'], 'C')
+        self.assertIn('next_number', response_data)
+
     def test_start_processing_rejects_non_numeric_ticket(self):
         """ticket_number に文字列（XSSペイロード等）を渡すと 400 になること"""
         response = self.app.post(

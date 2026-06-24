@@ -109,17 +109,14 @@ def print_ticket(category, button_text, number, timestamp_str):
     """レシートプリンターにチケットを印刷する。カテゴリDは印刷しない。"""
     if category == 'D':
         return
-    try:
-        import sys
-        encoding = 'cp932' if sys.platform == 'win32' else 'utf-8'
-        data = _build_escpos_data(category, button_text or '', number, timestamp_str or '', encoding)
-        if sys.platform == 'win32':
-            _print_windows(data)
-        else:
-            _print_linux(data)
-        print(f'[print_ticket] 印刷完了: カテゴリ={category} 番号={number}')
-    except Exception as e:
-        print(f'[print_ticket] error: {e}')
+    import sys
+    encoding = 'cp932' if sys.platform == 'win32' else 'utf-8'
+    data = _build_escpos_data(category, button_text or '', number, timestamp_str or '', encoding)
+    if sys.platform == 'win32':
+        _print_windows(data)
+    else:
+        _print_linux(data)
+    print(f'[print_ticket] 印刷完了: カテゴリ={category} 番号={number}')
 
 
 # ---------------------------------------------------------------------------
@@ -254,8 +251,16 @@ def get_next_number():
         print(f"get_next_number error: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
-    # DB書き込み成功後に印刷（失敗しても発券結果は返す）
-    print_ticket(category, button_text or '', new_number, timestamp or '')
+    # DB書き込み成功後に印刷。印刷失敗はクライアントへ返す。
+    try:
+        print_ticket(category, button_text or '', new_number, timestamp or '')
+    except Exception as e:
+        print(f'[get_next_number] print error: {e}')
+        return jsonify({
+            'error': 'Print failed',
+            'category': category,
+            'next_number': new_number,
+        }), 500
 
     return jsonify({'category': category, 'next_number': new_number})
 
