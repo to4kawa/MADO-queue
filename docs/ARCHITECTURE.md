@@ -572,3 +572,77 @@ python safe_migrate_db.py
 | waitress | >=3.0.0 | WSGIサーバー |
 | pyusb | >=1.0.0 | USB印刷（Linux/Docker） |
 | pywin32 | — | Windows印刷API（Windows環境のみ） |
+
+---
+
+## 12. 実装から確認できる全体像と要確認事項
+
+この節は、属人化を減らすために `app.py`、`init_db.py`、`safe_migrate_db.py`、`templates/`、`static/`、Docker 関連ファイルを読み、既存の実装リファレンスへ追記したものです。設計意図として断定できる内容と、コード・文書からは確認しきれない内容を分けて扱います。
+
+### 12.1 全体構成
+
+- Flask アプリケーションが、発券画面、職員処理画面、公開表示画面、JSON API、印刷処理を 1 つのプロセスで提供する。
+- SQLite は `data/numbers.db` を既定の保存先とし、`numbers`、`event_logs`、`processing_logs` の 3 テーブルで採番状態・発券履歴・処理履歴を管理する。
+- フロントエンドは Jinja2 テンプレートとバニラ JavaScript で構成され、ビルド工程を必要としない。
+- Docker 起動では `entrypoint.sh` が DB ファイルの有無を確認し、初回のみ `init_db.py` を実行した上で Waitress を起動する。
+
+### 12.2 処理の流れ
+
+1. 来庁者または職員が発券画面でカテゴリ・手続きボタンを選択する。
+2. `static/script.js` が `/get_next_number` へ JSON を送信する。
+3. `app.py` がカテゴリ別の現在番号を SQLite から取得し、必要に応じて日次リセットを行う。
+4. 発券履歴を `event_logs` に保存する。
+5. カテゴリ D 以外ではサーバー側の印刷処理を呼び出す。印刷失敗はログ出力されるが、発券レスポンス自体は継続される。
+6. 職員処理画面は未処理の `event_logs` と `processing_logs` の状態をもとに待ち一覧・対応中一覧を表示する。
+7. `/start_processing`、`/end_processing`、`/cancel_processing`、`/delete_ticket` が `processing_logs` を追加・更新・削除する。
+8. 公開表示画面は `/display_data` を定期的に取得し、呼び出し中番号と待ち人数を表示する。
+
+### 12.3 主要コンポーネント
+
+| コンポーネント | 役割 | 確認元 |
+|---|---|---|
+| Flask ルート | 画面表示、採番、処理開始・完了・取消、削除、表示データ取得を提供する。 | `app.py` |
+| DB 初期化 | 新規 DB 用の 3 テーブルとカテゴリ初期値を作成する。 | `init_db.py` |
+| DB 移行 | 既存 DB に不足カラムを追加する。 | `safe_migrate_db.py` |
+| 発券画面 | 職員数、カテゴリ、手続きボタンを表示し、採番 API を呼び出す。 | `templates/index.html`, `static/script.js` |
+| 職員処理画面 | 待ち一覧・対応中一覧と操作ボタンを表示する。 | `templates/syori.html` |
+| 公開表示画面 | 呼び出し中番号、待ち人数、時計、チャイムを表示する。 | `templates/display.html` |
+| 印刷処理 | ESC/POS バイト列を作り、Windows では `win32print`、Linux では `pyusb` 経由で送信する。 | `app.py` |
+| Docker 起動 | コンテナ起動、DB 初期化、Waitress 起動、データ永続化を担う。 | `Dockerfile`, `docker-compose.yml`, `entrypoint.sh` |
+
+### 12.4 データと設定の流れ
+
+- カテゴリごとの採番開始値は `config.py` の `CATEGORY_START` を `app.py` と `init_db.py` が参照する。
+- プリンター設定は環境変数 `PRINTER_NAME`、`PRINTER_VID`、`PRINTER_PID` から読み込まれ、未設定時は既定値が使われる。
+- `data/` は Docker Compose でホストディレクトリとしてマウントされるため、コンテナ再作成後も DB ファイルが残る。
+- 発券時の `staffCount` は任意項目として `event_logs` に保存され、処理開始時に `processing_logs` へ引き継がれる。
+- API の JSON スキーマは一部で camelCase（例: `buttonText`, `staffCount`）と snake_case（例: `ticket_number`, `event_log_id`）が混在する。これは現行実装の事実であり、変更する場合は互換性確認が必要。
+
+### 12.5 外部依存
+
+- Python パッケージは `requirements.txt` で管理される。
+- UI は CDN 上の Bootstrap / jQuery / Popper を参照する画面があるため、完全オフライン運用では表示・操作への影響確認が必要。
+- プリンター実機を使う場合、Windows では OS に登録されたプリンター名、Linux/Docker では USB デバイスアクセスが必要になる。
+- Docker で USB プリンターを使う場合は、`docker-compose.yml` の USB デバイス設定を環境に合わせて有効化する必要がある。
+
+### 12.6 設計上の前提
+
+- 受付ネットワーク内での独立運用を前提とし、住民個人情報は保存しない。
+- 認証・権限管理は実装されておらず、画面 URL の分離が主な利用者分離になっている。
+- SQLite 単体運用を前提としているため、複数プロセス・高負荷・同時発券時の厳密な挙動は別途検証が必要。
+- 印刷失敗時も採番と DB 記録を継続する実装であり、紙チケットが出ない場合の窓口運用は手順として決めておく必要がある。
+
+### 12.7 属人化している可能性がある箇所
+
+- 手続きボタンの文言とカテゴリ分類は、芽室町の窓口運用に依存している可能性がある。
+- プリンター既定値、印字文言、2 枚印刷、カテゴリ A 優先の注意書きは、運用現場の判断が含まれている可能性がある。
+- 職員数 1〜7 の選択肢、待ち人数の算出条件、表示画面の 60 秒表示・最大 5 件表示は、他自治体でそのまま適用できるとは限らない。
+- 日次リセットのタイミングはサーバーのローカル時刻と `event_logs` の当日データに依存するため、運用時間外・日付跨ぎの扱いは明文化が必要。
+
+### 12.8 不明・要確認事項
+
+- カテゴリ A=1〜499、B=500〜799 の上限を実装で強制する必要があるかどうか。
+- 発券 API で印刷失敗が起きた場合、来庁者・職員にどのように通知すべきか。
+- 職員処理画面と公開表示画面に認証を追加すべきかどうか。
+- 同時発券時に SQLite のロック・トランザクションで十分な一意性が確保されるかどうか。
+- 既存 DB を `safe_migrate_db.py` で移行した場合と、新規 DB を `init_db.py` で作成した場合のスキーマ差分を許容するかどうか。

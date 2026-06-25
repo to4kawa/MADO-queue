@@ -45,6 +45,46 @@ waitress-serve --host=0.0.0.0 --port=8000 app:app   # 本番起動（Waitress）
 ビルド・テスト・DBリセット、および WSL（Windows）でのハマりどころは [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) を参照。
 
 
+
+## リポジトリを読むための入口
+
+このリポジトリでは、README は「初めて読む人の入口」、`docs/REQUIREMENTS.md` は業務要件、`docs/ARCHITECTURE.md` は実装リファレンス、`docs/DEVELOPMENT.md` は開発・運用手順として使い分けます。重複を避けるため、詳細な API・DB・印刷仕様は README ではなく既存 docs を参照してください。
+
+### 主要ディレクトリ構成
+
+| パス | 役割 |
+|---|---|
+| `app.py` | Flask アプリ本体。画面ルート、採番 API、処理管理 API、表示 API、印刷処理を含む。 |
+| `init_db.py` | 新規 DB 作成時のスキーマとカテゴリ初期値を定義する。 |
+| `safe_migrate_db.py` | 既存 DB に不足カラムを追加するための移行スクリプト。 |
+| `config.py` | カテゴリごとの採番開始値を定義する。 |
+| `templates/` | 発券画面、職員処理画面、公開表示画面の Jinja2 テンプレート。 |
+| `static/` | 発券画面・表示画面で使う JavaScript と CSS。 |
+| `docs/` | 要件、アーキテクチャ、開発・運用、監査メモ。 |
+| `audit/` | マージしない PR や文書化試行の検証ログ。 |
+| `data/` | 実行時に SQLite DB を置く場所。`numbers.db` はコミットしない。 |
+
+### 主要ファイルの役割
+
+- 業務上の目的・カテゴリ設計・非機能要件は [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) を参照してください。
+- API、DB、画面、印刷、タイムゾーンの実装仕様は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) を参照してください。
+- Docker/ローカル起動、テスト、DB リセット、プリンター設定、トラブルシュートは [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) を参照してください。
+- 文書化時の確認順序と再利用可能なチェックリストは [docs/DOCUMENTATION_PROCESS.md](docs/DOCUMENTATION_PROCESS.md) を参照してください。
+
+### 開発・運用時の注意点
+
+- 実データ保護のため、テストや検証で実運用の `data/numbers.db` を使わないでください。
+- プリンターが接続されていない環境でも採番・DB 記録の確認は可能ですが、印刷失敗はログに出ます。
+- `docs/ARCHITECTURE.md` と `docs/DEVELOPMENT.md` に既存の詳細があるため、同じ内容の新規文書を増やさず、既存文書へ統合する方針です。
+- カテゴリ番号帯、日次リセット、プリンター失敗時の扱いなど、要件と実装の差分が疑われる箇所は監査対象として扱い、推測で断定しないでください。
+
+### 未確認事項
+
+- README 内の人口・来庁者数などの外部統計値は、この作業では再検証していません。
+- 本番運用でのプリンター機種・Windows/WSL/Docker 構成の組み合わせは、コードと既存文書で確認できる範囲のみ記載しています。
+- `audit/mado-queue-baseline` ブランチはこの作業環境では存在を確認できなかったため、今回の作業ブランチは作業開始時点の `work` ブランチから作成しました。
+
+
 ---
 
 ## なぜ作ったか
