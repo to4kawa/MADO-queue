@@ -1,28 +1,31 @@
-# MADO — Memuro Agile Desk Open
+# MADO-queue
 
-> An open-source counter service system built by and for small Japanese municipalities.
+MADO-queue は、北海道芽室町の住民窓口で運用されている MADO（Memuro Agile Desk Open）の `queue` パッケージです。来庁者向けの番号発券、職員向けの呼び出し・処理管理、待合室向けの番号表示を、Flask と SQLite で構成する小規模自治体向けの窓口番号発券システムです。
 
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Flask](https://img.shields.io/badge/Flask-3.x-black)
-![Python](https://img.shields.io/badge/Python-3.14-blue)
-![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
+> この README は、このリポジトリを初めて触る開発者が最短で構成と運用を把握できるように、既存ドキュメントと実装から確認できる事実を整理したものです。業務要件の詳細は [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)、既存の実装リファレンスは [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、開発手順は [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) も参照してください。
 
-> 窓口に来た住民が、名前を55回書く。
-> その問題を、現場の職員が自分で作って解決した。
+## 何をする repo か
 
-北海道芽室町が開発・運用している行政窓口業務支援システム **MADO** のOSS版。
-中・大規模向けSaaSではなく、**小規模自治体が現場で使い続けられるLITE版**として設計している。
+- 来庁者が手続き種別を選び、カテゴリ別の番号を発券します。
+- 職員が待ち一覧から番号を呼び出し、対応中・完了・不在・削除を管理します。
+- 待合室のディスプレイに呼び出し中番号と待ち人数を表示します。
+- 発券・処理の履歴を SQLite に保存し、待ち時間・処理時間の集計に使えるログを残します。
+- USB 接続の ESC/POS レシートプリンターへチケット印刷します。カテゴリ D は印刷しません。
 
-> 📦 **このリポジトリは MADO の最初の公開パッケージ `queue`（番号発券システム）です。**
-> hub / form / care / move は別リポジトリで順次公開予定（〜2026年10月）。全体像は [パッケージ構成](#パッケージ構成) を参照。
+## 主要機能
 
----
+| 機能 | 主な URL / ファイル | 概要 |
+| --- | --- | --- |
+| 発券画面 | `/`, `templates/index.html`, `static/script.js` | 来庁者がカテゴリ・手続きボタンを押し、`/get_next_number` で番号を発行します。 |
+| 職員処理画面 | `/processing`, `templates/syori.html` | 待ち一覧と対応中一覧を表示し、呼び出し・完了・不在・削除を操作します。 |
+| 表示画面 | `/display`, `templates/display.html` | `/display_data` を 3 秒ごとに取得し、呼び出し中番号と待ち人数を表示します。 |
+| 採番・ログ保存 | `app.py`, `init_db.py`, `config.py` | カテゴリ別の番号開始値、発券ログ、処理ログを SQLite に保存します。 |
+| DB 初期化・移行 | `init_db.py`, `safe_migrate_db.py`, `entrypoint.sh` | 初回 DB 作成と既存 DB へのカラム追加を担当します。 |
+| Docker 起動 | `Dockerfile`, `docker-compose.yml` | `/data/numbers.db` を永続化し、Waitress で Flask アプリを起動します。 |
 
-## Getting Started
+## セットアップ手順
 
-`queue` は北海道芽室町の窓口で**本番稼働中**の番号発券システム。受付ネットワーク上で独立して動作し、庁内システムとのネットワーク接続は不要。
-
-### Docker で起動（推奨）
+### Docker で起動する場合（推奨）
 
 ```bash
 git clone https://github.com/Memuro-Town/MADO-queue.git
@@ -30,172 +33,113 @@ cd MADO-queue
 docker compose up --build
 ```
 
-起動後、ブラウザで `http://localhost:8000` を開くと発券画面が立ち上がる。
-初回起動時に自動でDBを初期化し、データは `data/numbers.db` に保存される。バックアップはこのファイルをコピーするだけ。
+起動後、ブラウザで `http://localhost:8000` を開きます。初回起動時は `entrypoint.sh` が `init_db.py` を実行し、`data/numbers.db` が生成されます。
 
-### ローカルで起動（Docker を使わない場合）
+### Python で直接起動する場合
 
 ```bash
 pip install -r requirements.txt
-python init_db.py                                   # 初回のみ（DB初期化）
-python app.py                                       # 開発サーバー
-waitress-serve --host=0.0.0.0 --port=8000 app:app   # 本番起動（Waitress）
+python init_db.py
+python app.py
 ```
 
-ビルド・テスト・DBリセット、および WSL（Windows）でのハマりどころは [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) を参照。
+本番相当の WSGI サーバーで起動する場合は次を使います。
 
-
----
-
-## なぜ作ったか
-
-### 住民が名前を55回書く問題
-
-転入・婚姻と国保、障害者手帳などの手続きが重なると、住民は同じ書類に何度も同じ情報を書き込む。
-MADOは住民情報を一度読み込み、各申請書に自動転記することでこの負担を解消する（`form` パッケージ）。
-`queue` はその窓口体験の入口として、来庁者の受付・番号発券・呼び出しを担う。
-
-### 現場の職員が自分で作った
-
-専門的なプログラミング知識のない窓口職員がAIを活用して開発した（Vibe Coding）。
-基礎自治体の現場が開発した業務システムを、自治体公式OSSとして公開する。
-
-### 芽室町の規模（参考）
-
-同規模の自治体が導入を検討する際の目安として。
-
-| 指標 | 数値 |
-|---|---|
-| 人口 | 17,454名（2026年3月31日現在） |
-| 1日あたり来庁者数 | 163件（総合案内が設置された東側入口での計測） |
-| 戸籍・住民票等発行件数 | 20,769枚（2025年実績） |
-| 住民票異動件数 | 2,506件（2025年実績） |
-
----
-
-## これは何か
-
-| | MADO | 中・大規模向けSaaS |
-|---|---|---|
-| ターゲット | 小規模自治体（人口〜5万人程度） | 中・大規模自治体 |
-| 導入コスト | ソフトウェアは無償（構築支援は別途） | 月額・初期費用あり |
-| カスタマイズ | コードで自由に改変可 | ベンダー依存 |
-| 設計思想 | 来庁者の不安解消・対話時間の確保 | 処理効率化 |
-
-アナログとデジタルを組み合わせた設計。「速く処理する」より、システム導入により生まれる余力を「丁寧に寄り添う」窓口応対に充てることを優先している。
-
-> ソフトウェア自体は無償だが、環境構築・DB設計・DB更新などが必要なため、構築支援の委託を想定している。
-
----
-
-## 機能・画面構成（queue）
-
-| URL | 説明 | 利用者 |
-|-----|------|--------|
-| `/` | 発券画面 | 来庁者（タブレット設置） |
-| `/processing` | 処理画面 | 職員（呼び出し・対応操作） |
-| `/display` | 案内表示 | ロビーモニター（大画面表示） |
-
-導入はレシートプリンターと発券画面（`/`）のみの**スモールスタート**で始められる。
-
-- **`/processing`** は後から追加した。待ち時間・処理時間のログ取得と、窓口を離れた職員が自席から混雑状況を把握できるようにするため。
-- **`/display`** も後から追加した。音声呼び出しだけでは来庁者が気づかないケースがあるため、視覚でも呼び出し状況を確認できるように。
-
-### カテゴリ番号帯
-
-| カテゴリ | 番号帯 | 用途 |
-|---------|--------|------|
-| A | 001–499 | 一般窓口（初級） |
-| B | 500–799 | 専門窓口（中級） |
-| C | 800–   | その他（正職員） |
-| D | —      | 印刷なし・来庁者カウント用 |
-
-カテゴリの設計意図・2枚印字の理由・窓口運用モデルの詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)・[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) を参照。
-
----
-
-## パッケージ構成
-
-```mermaid
-graph TD
-    queue["📟 queue（このリポジトリ）<br/>番号発券 ✅ 本番稼働中"]
-    hub["🗄️ hub<br/>住民情報データ出力<br/>別リポジトリ・公開準備中"]
-    form["📄 form<br/>申請書作成支援<br/>別リポジトリ・順次公開"]
-    care["🕊️ care<br/>おくやみ手続き<br/>別リポジトリ・順次公開"]
-    move["🏠 move<br/>住民異動支援<br/>別リポジトリ・順次公開"]
-
-    hub --> form
-    hub --> care
-    hub --> move
-    queue -.- |独立動作| hub
+```bash
+waitress-serve --host=0.0.0.0 --port=8000 app:app
 ```
 
-`queue` は受付ネットワーク上で独立して動作する。庁内システムとのネットワーク接続は不要で、住民の個人情報を扱わない設計になっている。
-`hub` 以降はOSS公開に向けた整備が残っており、2026年10月までに順次公開予定。
+Windows で実プリンターを使う場合は、`requirements.txt` には含まれていない `pywin32` が別途必要です。
 
----
+## 実行方法
 
-## 技術スタック
+| 用途 | コマンド / URL |
+| --- | --- |
+| Docker 起動 | `docker compose up --build` |
+| Docker 停止 | 起動中のターミナルで `Ctrl+C` |
+| ローカル起動 | `python app.py` |
+| Waitress 起動 | `waitress-serve --host=0.0.0.0 --port=8000 app:app` |
+| テスト | `python -m unittest test_app -v` |
+| 発券画面 | `http://localhost:8000/` |
+| 職員処理画面 | `http://localhost:8000/processing` |
+| 表示画面 | `http://localhost:8000/display` |
 
-### queue（このリポジトリ）
-- **Framework**: Flask 3.x
-- **Language**: Python 3.14
-- **WSGI サーバー**: Waitress
-- **Database**: SQLite（別途DBサーバー不要）
-- **対応プリンター**: MUNBYN POS-80C（VID: `0x04b8` / PID: `0x0e20`・動作確認済み）
-- **ブラウザ**: Chrome / Edge（最新版）
+## ディレクトリ構成
 
-### hub / form / care / move（別リポジトリ）
-- **Framework**: Next.js (App Router) / **Language**: TypeScript / **Database**: SQLite
+```text
+MADO-queue/
+├── app.py                     # Flask アプリ本体、API、印刷、DB 操作
+├── config.py                  # カテゴリごとの番号開始値
+├── init_db.py                 # SQLite DB 初期化
+├── safe_migrate_db.py         # 既存 DB への安全なカラム追加
+├── test_app.py                # unittest ベースの API / DB テスト
+├── requirements.txt           # Python 依存関係
+├── Dockerfile                 # コンテナイメージ定義
+├── docker-compose.yml         # Docker Compose 起動設定
+├── entrypoint.sh              # コンテナ起動時の DB 初期化と Waitress 起動
+├── templates/                 # Flask / Jinja2 テンプレート
+├── static/                    # CSS、JavaScript、同梱 Bootstrap CSS
+├── docs/                      # 要件、設計、開発、運用、監査ドキュメント
+└── data/                      # 実行時 DB 保存先（Git 管理対象外の運用データ）
+```
 
----
+## 主要ファイルの役割
 
-## 3者の価値創造
+| ファイル | 役割 |
+| --- | --- |
+| `app.py` | 画面ルート、JSON API、採番、処理状態更新、表示データ生成、ESC/POS 印刷処理を含む中心ファイルです。 |
+| `config.py` | `A=1`, `B=500`, `C=800`, `D=0` の番号開始値を定義します。 |
+| `init_db.py` | `numbers`, `event_logs`, `processing_logs` テーブルを作成し、カテゴリ初期行を挿入します。 |
+| `safe_migrate_db.py` | 古い DB に不足カラムを追加します。削除や破壊的変更は行わない前提のスクリプトです。 |
+| `templates/index.html` | 発券ボタンと職員数ボタンを定義します。 |
+| `static/script.js` | 発券 API 呼び出し、JST タイムスタンプ生成、画面表示更新を担当します。 |
+| `templates/syori.html` | 職員向けの待ち・対応中一覧と API 呼び出し JavaScript を含みます。 |
+| `templates/display.html` | 待合室表示、3 秒ポーリング、チャイム音生成を含みます。 |
+| `Dockerfile` | Python 3.14 slim ベースで依存関係と libusb を導入します。 |
+| `docker-compose.yml` | ポート `8000:8000`、`./data:/data`、プリンター VID/PID を設定します。 |
 
-| 主体 | 得られるもの |
-|---|---|
-| **芽室町** | 開発・維持コストを外部と分散できる。担当者が異動してもコミュニティが保守を支えるため、属人化を解消できる |
-| **参画自治体** | 開発コストを抑えて現場で使えるシステムを導入できる。ただし芽室町での実運用実績はあるが、コード品質は保証されていない |
-| **エンジニア・ベンダー** | 普段触れない行政ドメイン知識が得られ、本番稼働中の行政システムへ貢献できる。MITライセンスのため商用利用可。自治体への構築支援を通じた新規顧客獲得にも活用できる |
+## 開発・運用時の注意点
 
----
+- 実運用 DB は `numbers.db` です。テストや調査では実 DB を使わず、`DB_PATH` で一時 DB を指定してください。
+- Docker では `DB_PATH=/data/numbers.db`、ホスト側では `./data/numbers.db` に永続化されます。
+- レシートプリンターは Windows では `win32print`、Linux / Docker では `pyusb` を使います。
+- `print_ticket()` は印刷失敗をログ出力して処理を継続する実装です。発券 API の成功と印刷成功は同義ではありません。
+- カテゴリ A/B/C/D の開始値は `config.py` にありますが、番号帯の上限 enforcement は別途確認が必要です。
+- CORS は `CORS_ORIGINS` 環境変数で指定できます。未指定時は `http://localhost:8000` です。
+- `safe_migrate_db.py` は既存 DB の不足カラム追加用です。新規 DB のスキーマは `init_db.py` を確認してください。
+- 既存監査方針では、プロダクション挙動の変更よりも証拠収集・再現テスト・文書化を優先します。
 
-## 現在の状況と求めること
+## 未確認事項
 
-MADOは「解決したい課題は明確だが、技術力がない」という現場の職員がAIを活用して開発した（Vibe Coding）。窓口業務での実用には耐えているが、コードの品質・設計・テストの面では未成熟な部分が多い。
+- 本番環境で使われている正確な OS、プリンタードライバー、USB 権限設定。
+- カテゴリ A=1–499、B=500–799 の上限を実装で厳密に止める必要があるかどうか。
+- `safe_migrate_db.py` で移行した古い DB と `init_db.py` で作った新規 DB の差分が、現行運用上どこまで許容されるか。
+- カテゴリ・ボタン名・職員数の値が自治体ごとにどの程度変更される想定か。
+- ログの保存期間、バックアップ頻度、障害時復旧手順の正式な運用ルール。
 
-**現場が作ったプロダクトを、エンジニアコミュニティと一緒に育てたい。** 特に以下の点で力を借りたい：
+## 関連ドキュメント
 
-- コードレビュー・リファクタリング
-- DB設計の見直し（場当たり的な実装で、将来の拡張性が考慮できていない）
-- テスト設計・自動化
-- セキュリティ観点での確認
-- 他自治体が導入しやすくなるための設計改善
-
-行政ドメインの現場知識はこちらにある。技術的な知識を持つ人と組み合わさることで、より多くの自治体で使えるシステムになると考えている。
-
----
-
-## Contributing
-
-→ [CONTRIBUTING.md](CONTRIBUTING.md)
-
-バグ報告・ドキュメント修正・設計議論、どこからでも歓迎する。各自治体の固有仕様はフォークで自由に派生してよい。**まず Issue（リポジトリ上部の "Issues" タブ）で話しかけてほしい。**
-
-行動規範は [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)、脆弱性の報告は [SECURITY.md](SECURITY.md) を参照。
-
----
-
-## 導入自治体
-
-→ [FORKED_SITES.md](FORKED_SITES.md)
-
----
+- [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md): 業務要件・対象ユーザー・機能要件
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): 既存の実装リファレンス
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): 開発・テスト・WSL 注意点
+- [docs/architecture.md](docs/architecture.md): 今回の文書化作業で整理した全体構成
+- [docs/operation.md](docs/operation.md): 通常運用・初回セットアップ・トラブルシュート
+- [docs/documentation-process.md](docs/documentation-process.md): 他 repo にも転用できる文書化プロセス
 
 ## License
 
 MIT License — Copyright (c) Memuro Town
 
-詳細は [LICENSE](LICENSE) を参照。
+詳細は [LICENSE](LICENSE) を参照してください。
 
-本リポジトリのコードは参考実装であり、各自治体での法令適合性・業務適合性は導入主体が確認すること。
+## MADO 全体の文脈
+
+MADO は、北海道芽室町が開発・運用している行政窓口業務支援システムの OSS 版です。中・大規模向け SaaS ではなく、小規模自治体が現場で使い続けられる LITE 版として設計されている、という説明が既存 README にありました。
+
+この `queue` リポジトリは、MADO のうち番号発券を担当する最初の公開パッケージです。既存 README では、`hub` / `form` / `care` / `move` は別リポジトリとして順次公開予定と説明されていました。これらのパッケージの公開状況や予定日は変わる可能性があるため、導入判断時には最新情報を確認してください。
+
+## Contributing
+
+バグ報告、ドキュメント修正、設計議論は歓迎されています。貢献前に [CONTRIBUTING.md](CONTRIBUTING.md)、行動規範は [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)、脆弱性報告は [SECURITY.md](SECURITY.md) を確認してください。
+
+導入自治体に関する情報は [FORKED_SITES.md](FORKED_SITES.md) を参照してください。
