@@ -1,0 +1,5 @@
+resident_id,municipality_code,municipality_name,display_name,kana_name,birth_date,sex,address_id,resident_status
+RES-001,019999,雪見町,雪野 太郎,ユキノ タロウ,1985-04-12,男,ADDR-001,住民
+RES-002,019999,雪見町,雪野 花子,ユキノ ハナコ,1987-09-03,女,ADDR-001,住民
+RES-003,019999,雪見町,森田 空,モリタ ソラ,2014-01-20,その他,ADDR-002,住民
+RES-004,019999,雪見町,川瀬 未来,カワセ ミライ,1978-11-30,女,ADDR-003,転出予定

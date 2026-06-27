@@ -1,0 +1,4 @@
+procedure_case_id,resident_id,household_id,procedure_type,channel,status,submitted_on,completed_on,memo
+CASE-001,RES-001,HH-001,転入届,窓口,完了,2020-04-01,2020-04-01,架空サンプルのMADO hub連携確認用
+CASE-002,RES-003,HH-002,住所変更,オンライン,完了,2023-07-15,2023-07-16,架空サンプルのMADO form連携確認用
+CASE-003,RES-004,HH-003,転出予定連絡,窓口,受付中,2025-03-01,,架空サンプルのMADO move連携確認用

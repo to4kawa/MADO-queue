@@ -1,0 +1,5 @@
+household_member_id,household_id,resident_id,relationship_to_head,joined_on,left_on
+HHM-001,HH-001,RES-001,本人,2020-04-01,
+HHM-002,HH-001,RES-002,配偶者,2020-04-01,
+HHM-003,HH-002,RES-003,本人,2023-07-15,
+HHM-004,HH-003,RES-004,本人,2022-10-10,

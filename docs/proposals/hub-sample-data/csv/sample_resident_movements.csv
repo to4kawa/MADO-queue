@@ -1,0 +1,4 @@
+movement_id,resident_id,movement_type,effective_date,previous_address_id,new_address_id,reason_note
+MOVE-001,RES-001,転入,2020-04-01,,ADDR-001,架空サンプルの転入
+MOVE-002,RES-003,町内転居,2023-07-15,ADDR-001,ADDR-002,架空サンプルの町内転居
+MOVE-003,RES-004,転出予定,2025-03-31,ADDR-003,,架空サンプルの転出予定
