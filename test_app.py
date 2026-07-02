@@ -22,7 +22,7 @@ import app as app_module
 from app import app
 
 # テスト中に実機プリンターへ印刷しないよう無効化する
-app_module.print_ticket = lambda *args, **kwargs: None
+app_module.print_ticket = lambda *args, **kwargs: True
 
 
 def tearDownModule():
@@ -50,6 +50,7 @@ class FlaskTest(unittest.TestCase):
         response_data = json.loads(response.data)
         self.assertEqual(response_data['category'], 'A')
         self.assertIn('next_number', response_data)
+        self.assertTrue(response_data['print_ok'])
 
     def test_get_next_number_increments(self):
         first = json.loads(self.app.post(
@@ -63,6 +64,22 @@ class FlaskTest(unittest.TestCase):
             content_type='application/json',
         ).data)
         self.assertEqual(second['next_number'], first['next_number'] + 1)
+
+    def test_get_next_number_returns_print_status_false_without_blocking_issue(self):
+        app_module.print_ticket = lambda *args, **kwargs: False
+        response = self.app.post(
+            '/get_next_number',
+            data=json.dumps({'category': 'C'}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response_data = json.loads(response.data)
+        self.assertEqual(response_data['category'], 'C')
+        self.assertIn('next_number', response_data)
+        self.assertFalse(response_data['print_ok'])
+
+        app_module.print_ticket = lambda *args, **kwargs: True
 
     def test_missing_category(self):
         response = self.app.post(
