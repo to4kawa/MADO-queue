@@ -1,0 +1,4 @@
+household_id,municipality_code,municipality_name,address_id,household_head_resident_id,household_status
+HH-001,019999,雪見町,ADDR-001,RES-001,有効
+HH-002,019999,雪見町,ADDR-002,RES-003,有効
+HH-003,019999,雪見町,ADDR-003,RES-004,有効
